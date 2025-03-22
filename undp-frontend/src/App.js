@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
 import WindyMap from './components/WindyMap';
+import WindyInfo from './components/WindyInfo';
 import GoogleEarthMap from './components/GoogleEarthMap';
 import DataUploader from './components/DataUploader';
 import './App.css';
@@ -26,16 +27,16 @@ function App() {
             <Link to="/google-earth" onClick={() => setActiveMap('google-earth')}>
               Google Earth Map
             </Link>
-            <Link to="/data-upload">
-              Upload Data
-            </Link>
           </nav>
         </header>
         
         <main>
           <Routes>
             <Route path="/" element={
-              <WindyMap weatherData={weatherData} />
+              <div>
+                <WindyInfo />
+                <WindyMap weatherData={weatherData} />
+              </div>
             } />
             <Route path="/google-earth" element={
               <GoogleEarthMap weatherData={weatherData} />

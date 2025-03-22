@@ -1,30 +1,53 @@
 // src/components/WindyMap.js
 import React, { useEffect, useRef, useState } from 'react';
-import 'leaflet/dist/leaflet.css';
 import './WindyMap.css';
 
 const WindyMap = ({ weatherData }) => {
   const windyContainerRef = useRef(null);
+  const leafletMapRef = useRef(null);
   const windyInstanceRef = useRef(null);
-  const [mapReady, setMapReady] = useState(false);
   const [activeLayer, setActiveLayer] = useState('wind');
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-  const [scriptError, setScriptError] = useState(false);
-  const markersRef = useRef([]);
+  const [mapReady, setMapReady] = useState(false);
+  const markersLayerRef = useRef(null);
 
-  // Load Windy API script
+  // Load Leaflet script first, as required by Windy API
   useEffect(() => {
-    // Check if script is already loaded
-    if (window.windyInit) {
-      setScriptLoaded(true);
+    // Check if leaflet script is already loaded
+    if (window.L) {
+      loadWindyAPI();
       return;
     }
 
-    // Check if we're already trying to load the script
-    const existingScript = document.getElementById('windy-api-script');
-    if (existingScript) {
+    const existingLeafletScript = document.getElementById('leaflet-script');
+    if (existingLeafletScript) return;
+
+    const leafletScript = document.createElement('script');
+    leafletScript.id = 'leaflet-script';
+    leafletScript.src = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.js';
+    leafletScript.async = true;
+    
+    leafletScript.onload = () => {
+      console.log('Leaflet loaded successfully');
+      loadWindyAPI();
+    };
+    
+    leafletScript.onerror = (error) => {
+      console.error('Error loading Leaflet:', error);
+    };
+    
+    document.head.appendChild(leafletScript);
+  }, []);
+
+  // Load Windy API after Leaflet is ready
+  const loadWindyAPI = () => {
+    // Check if Windy API script is already loaded
+    if (window.windyInit) {
+      initializeWindyMap();
       return;
     }
+
+    const existingScript = document.getElementById('windy-api-script');
+    if (existingScript) return;
 
     const script = document.createElement('script');
     script.id = 'windy-api-script';
@@ -33,160 +56,113 @@ const WindyMap = ({ weatherData }) => {
     
     script.onload = () => {
       console.log('Windy API script loaded successfully');
-      setScriptLoaded(true);
+      initializeWindyMap();
     };
     
     script.onerror = (error) => {
       console.error('Error loading Windy API script:', error);
-      console.log(error)
-      setScriptError(true);
     };
     
     document.head.appendChild(script);
+  };
 
-    return () => {
-      // Don't remove the script on component unmount as it might be used elsewhere
-    };
-  }, []);
-
-  // Initialize Windy map after script loads
-  useEffect(() => {
-    if (!scriptLoaded || !windyContainerRef.current || windyInstanceRef.current) {
+  // Initialize Windy map after both scripts are loaded
+  const initializeWindyMap = () => {
+    if (!windyContainerRef.current || windyInstanceRef.current || !window.windyInit) {
       return;
     }
 
-    // Give windyInit a moment to be defined
-    const initializeTimeout = setTimeout(() => {
-      if (typeof window.windyInit === 'function') {
-        initWindy();
-      } else {
-        console.error('window.windyInit is still not a function after script loaded');
-        setScriptError(true);
-      }
-    }, 500);
+    // Create options for Windy initialization
+    const options = {
+      // Replace with your actual Windy API key
+      key: '',
+      verbose: true,
+      // Initial coordinates and zoom
+      lat: 10.8415958,
+      lon: 106.751815,
+      zoom: 13
+    };
 
-    return () => clearTimeout(initializeTimeout);
-  }, [scriptLoaded]);
-
-  // Initialize Windy map
-  const initWindy = () => {
-    try {
-      console.log('Initializing Windy map...');
+    // Initialize Windy
+    window.windyInit(options, windyAPI => {
+      // Store the Windy instance for later use
+      windyInstanceRef.current = windyAPI;
       
-      const options = {
-        key: '', // Replace with your Windy API key or use ''
-        verbose: true,
-        lat: 40,
-        lon: -100,
-        zoom: 4,
-      };
-
-      // Create a fallback if windyInit isn't ready yet
-      if (typeof window.windyInit !== 'function') {
-        console.error('windyInit not available');
-        setScriptError(true);
-        return;
+      // Extract the elements we need
+      const { map, store, overlays } = windyAPI;
+      
+      // Store the leaflet map reference
+      leafletMapRef.current = map;
+      
+      // Set default overlay
+      store.set('overlay', activeLayer);
+      
+      // Initialize a layer group for our weather markers
+      markersLayerRef.current = window.L.layerGroup().addTo(map);
+      
+      // Set map as ready
+      setMapReady(true);
+      
+      // Add weather data markers if available
+      if (weatherData && weatherData.length > 0) {
+        addWeatherMarkers();
       }
-
-      window.windyInit(options, windyAPI => {
-        console.log('Windy API initialized successfully');
-        
-        // Store the Windy instance
-        windyInstanceRef.current = windyAPI;
-        
-        // Expose necessary parts of windyAPI
-        const { map, store } = windyAPI;
-
-        // Set mapReady state to true
-        setMapReady(true);
-
-        // Set default overlay
-        store.set('overlay', 'wind');
-
-        // Add event listener for map changes
-        map.on('zoomend', () => {
-          console.log('Map zoom level:', map.getZoom());
-        });
-        
-        // Add weather markers if data is available
-        if (weatherData && weatherData.length > 0) {
-          addWeatherMarkers();
-        }
-      });
-    } catch (error) {
-      console.error('Error in initWindy:', error);
-      setScriptError(true);
-    }
+    });
   };
 
-  // Effect to update map markers when weatherData changes
+  // Update markers when weather data changes
   useEffect(() => {
-    if (mapReady && weatherData && weatherData.length > 0 && windyInstanceRef.current) {
+    if (mapReady && weatherData && weatherData.length > 0) {
       addWeatherMarkers();
     }
   }, [weatherData, mapReady]);
 
-  // Function to add weather markers to the map
+  // Add weather data markers to the map
   const addWeatherMarkers = () => {
-    if (!windyInstanceRef.current || !windyInstanceRef.current.map) {
-      console.error('Windy map instance not available');
-      return;
-    }
-
-    try {
-      const { map } = windyInstanceRef.current;
+    if (!leafletMapRef.current || !markersLayerRef.current) return;
+    
+    // Clear existing markers
+    markersLayerRef.current.clearLayers();
+    
+    // Add new markers for each weather data point
+    weatherData.forEach(point => {
+      const { lat, lon, temperature, humidity, windSpeed, pressure } = point;
       
-      // Clear existing markers
-      if (markersRef.current.length > 0) {
-        markersRef.current.forEach(marker => {
-          if (marker && map) {
-            marker.remove();
-          }
-        });
-        markersRef.current = [];
-      }
-
-      // Add new markers for each weather data point
-      weatherData.forEach(point => {
-        const { lat, lon, temperature, humidity, windSpeed, pressure } = point;
-        
-        // Check if Leaflet is available
-        if (window.L) {
-          // Create a marker using Leaflet (which Windy uses underneath)
-          const marker = window.L.marker([lat, lon]).addTo(map);
-          
-          // Create popup content with weather information
-          const popupContent = `
-            <div class="weather-popup">
-              <h3>Weather Station</h3>
-              <p>Temperature: ${temperature}°C</p>
-              <p>Humidity: ${humidity}%</p>
-              <p>Wind Speed: ${windSpeed} m/s</p>
-              <p>Pressure: ${pressure} hPa</p>
-            </div>
-          `;
-          
-          // Bind popup to marker
-          marker.bindPopup(popupContent);
-          
-          // Store marker reference for later cleanup
-          markersRef.current.push(marker);
-        } else {
-          console.error('Leaflet library (L) is not available');
-        }
+      // Create marker with custom icon for better visibility
+      const marker = window.L.marker([lat, lon], {
+        icon: window.L.divIcon({
+          className: 'weather-marker',
+          html: `<div class="marker-temp">${Math.round(temperature)}°</div>`,
+          iconSize: [40, 40]
+        })
       });
-    } catch (error) {
-      console.error('Error adding weather markers:', error);
-    }
+      
+      // Create popup content
+      const popupContent = `
+        <div class="weather-popup">
+          <h3>Weather Station</h3>
+          <p><strong>Temperature:</strong> ${temperature}°C</p>
+          <p><strong>Humidity:</strong> ${humidity}%</p>
+          <p><strong>Wind Speed:</strong> ${windSpeed} m/s</p>
+          <p><strong>Pressure:</strong> ${pressure} hPa</p>
+        </div>
+      `;
+      
+      // Bind popup to marker
+      marker.bindPopup(popupContent);
+      
+      // Add marker to the layer group
+      marker.addTo(markersLayerRef.current);
+    });
   };
 
-  // Function to change the Windy layer
+  // Change the active Windy overlay/layer
   const changeWindyLayer = (layer) => {
-    if (windyInstanceRef.current && windyInstanceRef.current.store) {
-      const { store } = windyInstanceRef.current;
-      store.set('overlay', layer);
-      setActiveLayer(layer);
-    }
+    if (!windyInstanceRef.current) return;
+    
+    const { store } = windyInstanceRef.current;
+    store.set('overlay', layer);
+    setActiveLayer(layer);
   };
 
   return (
@@ -205,39 +181,26 @@ const WindyMap = ({ weatherData }) => {
           Temperature
         </button>
         <button 
-          className={activeLayer === 'rain' ? 'active' : ''} 
-          onClick={() => changeWindyLayer('rain')}
-        >
-          Precipitation
-        </button>
-        <button 
           className={activeLayer === 'clouds' ? 'active' : ''} 
           onClick={() => changeWindyLayer('clouds')}
         >
           Clouds
         </button>
+        <button 
+          className={activeLayer === 'pressure' ? 'active' : ''} 
+          onClick={() => changeWindyLayer('pressure')}
+        >
+          Pressure
+        </button>
       </div>
       
-      {scriptError && (
-        <div className="error-message" style={{ padding: '1rem', backgroundColor: '#f8d7da', color: '#721c24', marginBottom: '1rem', borderRadius: '4px' }}>
-          <p><strong>Error loading Windy map:</strong> There was a problem initializing the Windy API.</p>
-          <p>Please check your internet connection and API key configuration.</p>
-          <p>As a fallback, you might want to try using <a href="/google-earth">Google Earth Map</a> instead.</p>
+      <div id="windy" ref={windyContainerRef} style={{ width: '100%', height: '600px' }}></div>
+      
+      {!mapReady && (
+        <div className="loading-overlay">
+          <p>Loading Windy map...</p>
         </div>
       )}
-      
-      <div 
-        id="windy-map-container" 
-        ref={windyContainerRef} 
-        style={{ width: '100%', height: '600px', border: scriptError ? '1px dashed #ccc' : 'none' }}
-      >
-        {scriptError && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column' }}>
-            <p>Unable to load Windy map</p>
-            <small>Check console for details</small>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
