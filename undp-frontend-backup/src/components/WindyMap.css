@@ -1,0 +1,33 @@
+/* src/components/WindyMap.css - Add these additional styles */
+
+.overlay-marker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .marker-overlay {
+    background-color: rgba(74, 144, 226, 0.8);
+    color: white;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 12px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+    border: 2px solid white;
+  }
+  
+  .overlay-popup h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .overlay-popup p {
+    margin: 0.3rem 0;
+    font-size: 0.9rem;
+  }

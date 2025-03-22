@@ -21,8 +21,5 @@
       }
     },
     "include": ["src"],
-    "exclude": ["node_modules", "build", "dist", "scripts", "config/jest"],
-    "paths": {
-  "@/*": ["*"]
-}
+    "exclude": ["node_modules", "build", "dist", "scripts", "config/jest"]
   }

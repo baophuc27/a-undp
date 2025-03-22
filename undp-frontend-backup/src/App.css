@@ -1,0 +1,344 @@
+/* src/App.css */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 1rem 2rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+nav {
+  display: flex;
+  margin-top: 1rem;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  margin-right: 1.5rem;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+nav a:after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: white;
+  transition: width 0.3s;
+}
+
+nav a:hover:after {
+  width: 100%;
+}
+
+main {
+  flex: 1;
+  padding: 2rem;
+}
+
+/* src/components/WindyMap.css */
+.map-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.layer-controls {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.layer-controls button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  background-color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.layer-controls button:hover {
+  background-color: #f1f1f1;
+}
+
+.layer-controls button.active {
+  background-color: #4a90e2;
+  color: white;
+  border-color: #4a90e2;
+}
+
+.weather-popup {
+  min-width: 200px;
+}
+
+.weather-popup h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+.weather-popup p {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+}
+
+/* src/components/GoogleEarthMap.css */
+.weather-info-window {
+  min-width: 200px;
+}
+
+.weather-info-window h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+.weather-info-window p {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+}
+
+/* src/components/DataUploader.css */
+.data-uploader {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.upload-options {
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.upload-type-selector {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.upload-type-selector label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.file-upload-container {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.upload-button,
+.manual-entry-button,
+.template-button {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upload-button {
+  background-color: #4a90e2;
+  color: white;
+}
+
+.upload-button:hover {
+  background-color: #3a7bc8;
+}
+
+.upload-button:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+.manual-entry-button,
+.template-button {
+  background-color: #f1f1f1;
+  color: #333;
+}
+
+.manual-entry-button:hover,
+.template-button:hover {
+  background-color: #e1e1e1;
+}
+
+.error-message {
+  color: #d9534f;
+  background-color: #f9e5e5;
+  padding: 1rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+}
+
+.data-preview {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+
+.data-preview h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.data-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-preview th,
+.data-preview td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.data-preview th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
+.preview-note {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 1rem;
+  margin-bottom: 0;
+}
+
+.layer-manager {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.layer-manager h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.layer-manager ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.layer-manager li {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.layer-manager li:last-child {
+  border-bottom: none;
+}
+
+.layer-manager span {
+  margin-left: 0.75rem;
+  flex: 1;
+}
+
+.layer-manager button {
+  background-color: #f1f1f1;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.layer-manager button:hover {
+  background-color: #e1e1e1;
+}
+
+.data-format-info {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.data-format-info h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.format-tabs {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 1.5rem;
+}
+
+.tab {
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tab:hover {
+  background-color: #f8f9fa;
+}
+
+.tab.active {
+  border-bottom: 2px solid #4a90e2;
+  font-weight: 600;
+}
+
+.format-content h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.format-content ul {
+  padding-left: 1.5rem;
+}
+
+.format-content button {
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.format-content button:hover {
+  background-color: #3a7bc8;
+}

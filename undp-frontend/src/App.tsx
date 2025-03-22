@@ -1,5 +1,5 @@
 import React from 'react';
-import MapContainer from './components/Map/MapComponent';
+import MapContainer from './components/Map/MapContainer';
 import { MapLayer } from './types/map';
 import './App.css';
 

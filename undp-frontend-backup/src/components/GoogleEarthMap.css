@@ -1,0 +1,14 @@
+.weather-info-window {
+    min-width: 200px;
+  }
+  
+  .weather-info-window h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .weather-info-window p {
+    margin: 0.3rem 0;
+    font-size: 0.9rem;
+  }
