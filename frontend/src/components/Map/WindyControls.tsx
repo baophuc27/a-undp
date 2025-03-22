@@ -67,4 +67,5 @@ const WindyControls: React.FC<WindyControlsProps> = ({
   );
 };
 
-export default React.memo(WindyControls);
+// export default React.memo(WindyControls);
+export default WindyControls;
