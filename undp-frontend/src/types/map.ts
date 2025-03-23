@@ -42,17 +42,30 @@ export interface WindyOptions {
   };
 }
 
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface MapLayer {
   id: string;
   name: string;
   url: string;
   attribution: string;
   visible: boolean;
-}
-
-export interface GeoPoint {
-  lat: number;
-  lng: number;
+  type?: 'base' | 'tile' | 'wms' | 'geoJson' | 'windy';
+  minZoom?: number;
+  maxZoom?: number;
+  opacity?: number;
+  zIndex?: number;
+  wmsParams?: {
+    layers: string;
+    format?: string;
+    transparent?: boolean;
+    [key: string]: any;
+  };
+  geoJsonData?: GeoJSON.GeoJSON;
+  geoJsonOptions?: any;
 }
 
 export interface WeatherStation {
@@ -79,4 +92,22 @@ export interface WeatherAlert {
   radius?: number;  // Affected radius in kilometers
   startTime: Date;
   endTime?: Date;
+}
+
+export interface DataPoint {
+  id: string;
+  lat: number;
+  lng: number;
+  value: number;
+  type?: string;
+  name?: string;
+  description?: string;
+  properties?: Record<string, any>;
+}
+
+export interface MapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
 }

@@ -1,0 +1,151 @@
+.map-container {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .windy-container {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .zoom-indicator {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+  }
+  
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .error-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: rgba(231, 76, 60, 0.9);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    z-index: 1100;
+    max-width: 80%;
+  }
+  
+  .distance-overlay {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    z-index: 900;
+  }
+  
+  .data-layer-loading,
+  .data-layer-error {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 8px 12px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    z-index: 900;
+    font-size: 12px;
+  }
+  
+  .data-layer-error {
+    background-color: rgba(231, 76, 60, 0.9);
+    color: white;
+  }
+  
+  /* Custom marker styles */
+  .weather-marker .marker-temp {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: rgba(41, 128, 185, 0.8);
+    border: 2px solid white;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+    font-size: 14px;
+  }
+  
+  /* Popup styles */
+  .weather-popup {
+    padding: 5px;
+  }
+  
+  .weather-popup h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+  }
+  
+  .weather-popup p {
+    margin: 5px 0;
+    font-size: 13px;
+  }
+  
+  .marker-overlay {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+  }
+  
+  .overlay-popup h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+  }
+  
+  .data-point-tooltip h3 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+  }
+  
+  .data-point-tooltip p {
+    margin: 3px 0;
+    font-size: 12px;
+  }

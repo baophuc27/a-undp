@@ -1,30 +1,45 @@
-// src/services/windy.service.ts
+// src/services/windyService.ts
 import L from 'leaflet';
 import { WindyOptions } from '../types/map';
 
-export interface WindyLayer {
-  id: string;
-  name: string;
-  overlayFunction: string;
-}
-
-interface WindyAPI {
+// Define interface for the Windy API
+export interface WindyAPI {
   picker: {
     on: (event: string, callback: (data: any) => void) => void;
     open: (options: { lat: number; lon: number }) => void;
+    close: () => void;
+    getParams: () => any;
   };
   broadcast: {
     on: (event: string, callback: (data: any) => void) => void;
+    fire: (event: string, data?: any) => void;
   };
   overlays: {
     [key: string]: () => void;
   };
+  map: L.Map;
   store: {
     get: (key: string) => any;
     set: (key: string, value: any) => void;
+    on: (key: string, callback: (value: any) => void) => void;
   };
-  map: L.Map;
-  [key: string]: any; // Allow for additional properties
+  products: {
+    availableLevels: string[];
+    availableOverlays: string[];
+    availableTimestamps: number[];
+  };
+  utils: {
+    wind2obj: (uv: [number, number]) => { wind: number; dir: number };
+    dateFormat: (timestamp: number) => string;
+  };
+  [key: string]: any;
+}
+
+// Interface for Windy layers
+export interface WindyLayer {
+  id: string;
+  name: string;
+  overlayFunction: string;
 }
 
 // Sample weather data interface
@@ -45,11 +60,15 @@ export interface OverlayPoint {
   type: 'info' | 'warning' | 'alert';
 }
 
+/**
+ * WindyService - A service for interacting with the Windy API
+ */
 export class WindyService {
   private windyApi: WindyAPI;
   private options: WindyOptions;
   private markersLayer: L.LayerGroup | null = null;
   private overlayLayer: L.LayerGroup | null = null;
+  private changeListeners: Array<(event: string, data: any) => void> = [];
   
   constructor(windyApi: WindyAPI, options: WindyOptions) {
     this.windyApi = windyApi;
@@ -59,7 +78,63 @@ export class WindyService {
     if (this.windyApi.map) {
       this.markersLayer = L.layerGroup().addTo(this.windyApi.map);
       this.overlayLayer = L.layerGroup().addTo(this.windyApi.map);
+      
+      // Setup broadcast listeners
+      this.setupBroadcastListeners();
     }
+  }
+  
+  /**
+   * Setup listeners for Windy broadcast events
+   */
+  private setupBroadcastListeners(): void {
+    if (!this.windyApi.broadcast) return;
+    
+    // Listen for redraw events
+    this.windyApi.broadcast.on('redrawFinished', () => {
+      this.notifyListeners('redraw', {});
+    });
+    
+    // Listen for parameter changes
+    this.windyApi.broadcast.on('paramsChanged', (params) => {
+      this.notifyListeners('params', params);
+    });
+    
+    // Listen for store changes
+    this.windyApi.store.on('overlay', (overlay) => {
+      this.notifyListeners('overlay', { overlay });
+    });
+    
+    this.windyApi.store.on('level', (level) => {
+      this.notifyListeners('level', { level });
+    });
+  }
+  
+  /**
+   * Notify all registered listeners of changes
+   */
+  private notifyListeners(event: string, data: any): void {
+    this.changeListeners.forEach(listener => {
+      try {
+        listener(event, data);
+      } catch (error) {
+        console.error('Error in Windy listener:', error);
+      }
+    });
+  }
+  
+  /**
+   * Register a listener for Windy changes
+   */
+  public addChangeListener(callback: (event: string, data: any) => void): void {
+    this.changeListeners.push(callback);
+  }
+  
+  /**
+   * Remove a registered listener
+   */
+  public removeChangeListener(callback: (event: string, data: any) => void): void {
+    this.changeListeners = this.changeListeners.filter(cb => cb !== callback);
   }
   
   /**
@@ -111,6 +186,8 @@ export class WindyService {
       if (layer && this.windyApi.overlays[layer.overlayFunction]) {
         this.windyApi.overlays[layer.overlayFunction]();
       }
+      
+      this.notifyListeners('layerChange', { layerId });
     } catch (error) {
       console.error('Error setting active layer:', error);
     }
@@ -178,7 +255,7 @@ export class WindyService {
       // Bind popup to marker
       marker.bindPopup(popupContent);
       
-      // Add marker to the layer group (check if layer exists first)
+      // Add marker to the layer group
       if (this.markersLayer) {
         marker.addTo(this.markersLayer);
       }
@@ -226,7 +303,7 @@ export class WindyService {
       // Bind popup to marker
       marker.bindPopup(popupContent);
       
-      // Add marker to the overlay layer group (check if layer exists first)
+      // Add marker to the overlay layer group
       if (this.overlayLayer) {
         marker.addTo(this.overlayLayer);
       }
@@ -256,6 +333,7 @@ export class WindyService {
     if (!this.windyApi.store) return;
     
     this.windyApi.store.set('timestamp', timestamp);
+    this.notifyListeners('timeChange', { timestamp });
   }
   
   /**
@@ -266,6 +344,66 @@ export class WindyService {
     if (!this.windyApi.store) return;
     
     this.windyApi.store.set('level', level);
+    this.notifyListeners('levelChange', { level });
+  }
+  
+  /**
+   * Get all available altitude levels
+   * @returns Array of available levels
+   */
+  public getAvailableLevels(): string[] {
+    if (this.windyApi.products && this.windyApi.products.availableLevels) {
+      return this.windyApi.products.availableLevels;
+    }
+    
+    // Default levels if Windy API doesn't provide them
+    return ['surface', '850h', '700h', '500h', '300h'];
+  }
+  
+  /**
+   * Get all available forecast timestamps
+   * @returns Array of available timestamps
+   */
+  public getAvailableTimestamps(): number[] {
+    if (this.windyApi.products && this.windyApi.products.availableTimestamps) {
+      return this.windyApi.products.availableTimestamps;
+    }
+    
+    return [];
+  }
+  
+  /**
+   * Get the current zoom level from Windy store
+   * @returns Current zoom level or null if not available
+   */
+  public getCurrentZoom(): number | null {
+    try {
+      const mapCoords = this.windyApi.store.get('mapCoords');
+      if (mapCoords && typeof mapCoords.zoom === 'number') {
+        return mapCoords.zoom;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting zoom level:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get the current center coordinates from Windy store
+   * @returns Current center coordinates or null if not available
+   */
+  public getCurrentCenter(): { lat: number; lon: number } | null {
+    try {
+      const mapCoords = this.windyApi.store.get('mapCoords');
+      if (mapCoords && typeof mapCoords.lat === 'number' && typeof mapCoords.lon === 'number') {
+        return { lat: mapCoords.lat, lon: mapCoords.lon };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting center coordinates:', error);
+      return null;
+    }
   }
   
   /**
@@ -280,5 +418,23 @@ export class WindyService {
    */
   public getMap(): L.Map {
     return this.windyApi.map;
+  }
+  
+  /**
+   * Clean up resources when the service is no longer needed
+   */
+  public cleanup(): void {
+    // Clear markers
+    if (this.markersLayer) {
+      this.markersLayer.clearLayers();
+    }
+    
+    // Clear overlays
+    if (this.overlayLayer) {
+      this.overlayLayer.clearLayers();
+    }
+    
+    // Clear listeners
+    this.changeListeners = [];
   }
 }
