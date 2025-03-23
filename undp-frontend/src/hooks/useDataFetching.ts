@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { env } from '../config/env';
+import { MockDataService } from '../services/mockDataService';
+
+// Set this to true to use mock data instead of calling the API
+const USE_MOCK_DATA = true;
 
 interface FetchOptions {
   endpoint: string;
@@ -46,6 +50,13 @@ export function useDataFetching<T = any>(options: FetchOptions) {
     return url.toString();
   }, [endpoint, params]);
 
+  // Get mock data based on endpoint
+  const getMockData = useCallback(() => {
+    // Extract dataset name from endpoint
+    const datasetName = endpoint.split('/').pop() || endpoint;
+    return MockDataService.getDataPoints(datasetName) as unknown as T;
+  }, [endpoint]);
+
   // Fetch data function
   const fetchData = useCallback(async (customOptions?: Partial<FetchOptions>) => {
     // Merge default options with custom options
@@ -54,23 +65,55 @@ export function useDataFetching<T = any>(options: FetchOptions) {
       ...customOptions
     };
     
-    // Prepare request options
-    const requestOptions: RequestInit = {
-      method: mergedOptions.method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...mergedOptions.headers
-      }
-    };
-    
-    // Add body for non-GET requests
-    if (mergedOptions.method !== 'GET' && mergedOptions.body) {
-      requestOptions.body = JSON.stringify(mergedOptions.body);
-    }
-    
+    // Start loading state
     setState(prev => ({ ...prev, loading: true, error: null }));
     
+    // If using mock data, return it instead of making an API call
+    if (USE_MOCK_DATA) {
+      try {
+        // Simulate network delay for more realistic behavior
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const mockData = getMockData();
+        
+        setState({
+          data: mockData,
+          loading: false,
+          error: null,
+          timestamp: Date.now()
+        });
+        
+        return mockData;
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error('Error getting mock data');
+        
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: errorObj,
+          timestamp: Date.now()
+        }));
+        
+        throw errorObj;
+      }
+    }
+    
+    // Continue with real API call if not using mock data
     try {
+      // Prepare request options
+      const requestOptions: RequestInit = {
+        method: mergedOptions.method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...mergedOptions.headers
+        }
+      };
+      
+      // Add body for non-GET requests
+      if (mergedOptions.method !== 'GET' && mergedOptions.body) {
+        requestOptions.body = JSON.stringify(mergedOptions.body);
+      }
+      
       // Build URL with updated params
       const url = customOptions?.params 
         ? new URL(`${env.API_URL}/${mergedOptions.endpoint}`).toString() 
@@ -104,7 +147,7 @@ export function useDataFetching<T = any>(options: FetchOptions) {
       
       throw errorObj;
     }
-  }, [options, buildUrl]);
+  }, [options, buildUrl, getMockData]);
 
   // Automatically fetch data on mount if autoFetch is true
   useEffect(() => {

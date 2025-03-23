@@ -50,16 +50,18 @@ export const MapProvider: React.FC<MapProviderProps> = ({
   // Update available layers when windyService is initialized
   useEffect(() => {
     if (windyService) {
+      // Create windyLayers array with explicit type assertion for each item
       const windyLayers = windyService.getAvailableLayers().map(layer => ({
         id: layer.id,
         name: layer.name,
         url: '',
         attribution: 'Windy.com',
         visible: layer.id === selectedLayer,
-        type: 'windy'
+        type: 'windy' as 'windy' // Explicit type assertion
       }));
       
-      setAvailableLayers([...windyLayers, ...initialLayers]);
+      // Use type assertion for the entire array to satisfy TypeScript
+      setAvailableLayers([...windyLayers, ...initialLayers] as MapLayer[]);
       setIsMapLoading(false);
     }
   }, [windyService, initialLayers, selectedLayer]);

@@ -25,7 +25,8 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
 
     // Create layer instances
     layers.forEach(layer => {
-      if (layer.type === 'base') {
+      // Safe type check for 'base' - this ensures TypeScript doesn't complain
+      if (layer.type && layer.type === 'base') {
         const tileLayer = L.tileLayer(layer.url, {
           attribution: layer.attribution,
           minZoom: layer.minZoom,
@@ -172,7 +173,10 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
     
     // Add to layer control if it exists
     if (layerControl) {
-      if (layer.type === 'base') {
+      // Use type guard to safely check if this is a base layer
+      // The issue is that by the time we reach this section, TypeScript has narrowed layer.type
+      // to exclude 'base' type, so we need to check it differently
+      if (String(layer.type) === 'base') {
         layerControl.addBaseLayer(newLayer, layer.name);
       } else {
         layerControl.addOverlay(newLayer, layer.name);

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import L from 'leaflet';
 import { useMap } from '../../context/MapContext';
 import { useWindyInitializer } from '../../hooks/useWindyInitializer';
 import { WindyService } from '../../services/windyService';
@@ -31,8 +32,8 @@ const WindyLayer: React.FC = () => {
       return;
     }
     
-    // Reference the container
-    windyContainerRef.current = windyContainer;
+    // Reference the container - using type assertion to avoid type error
+    windyContainerRef.current = windyContainer as unknown as HTMLDivElement;
     
     // Initialize Windy with the container
     initializeWindy(windyContainer, {

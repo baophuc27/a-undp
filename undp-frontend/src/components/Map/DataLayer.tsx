@@ -34,6 +34,36 @@ const DataLayer: React.FC<DataLayerProps> = ({
   const [data, setData] = useState<DataPoint[]>([]);
   const pointLayersRef = useRef<Record<string, L.CircleMarker>>({});
   
+  // TEMPORARY: Use mock data instead of fetching from API
+  const mockData: DataPoint[] = [
+    {
+      id: "station1",
+      lat: 10.835,
+      lng: 106.769,
+      value: 75,
+      name: "Station Alpha",
+      description: "Weather monitoring station in central location"
+    },
+    {
+      id: "station2",
+      lat: 10.855,
+      lng: 106.789,
+      value: 42,
+      name: "Station Beta",
+      description: "Urban environment station"
+    },
+    {
+      id: "station3",
+      lat: 10.815,
+      lng: 106.749,
+      value: 88,
+      name: "Station Gamma",
+      description: "High precision weather station"
+    }
+  ];
+  
+  // Comment out the API fetching temporarily
+  /*
   // Use the data fetching hook
   const { 
     data: fetchedData,
@@ -44,7 +74,33 @@ const DataLayer: React.FC<DataLayerProps> = ({
     endpoint: url,
     autoFetch: true
   });
-
+  
+  // Update local data state when fetched data changes
+  useEffect(() => {
+    if (fetchedData) {
+      setData(fetchedData);
+    }
+  }, [fetchedData]);
+  
+  // Set up refresh interval
+  useEffect(() => {
+    if (refreshInterval <= 0) return;
+    
+    const intervalId = setInterval(() => {
+      refetch();
+    }, refreshInterval);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [refreshInterval, refetch]);
+  */
+  
+  // TEMPORARY: Use mock data
+  useEffect(() => {
+    setData(mockData);
+  }, []);
+  
   // Default color function: value from blue to red
   const defaultColorFunction = useMemo(() => {
     return (value: number) => {
@@ -85,26 +141,6 @@ const DataLayer: React.FC<DataLayerProps> = ({
   const getColor = pointColorFunction || defaultColorFunction;
   const getRadius = pointRadiusFunction || defaultRadiusFunction;
   const getTooltip = tooltipFunction || defaultTooltipFunction;
-
-  // Update local data state when fetched data changes
-  useEffect(() => {
-    if (fetchedData) {
-      setData(fetchedData);
-    }
-  }, [fetchedData]);
-
-  // Set up refresh interval
-  useEffect(() => {
-    if (refreshInterval <= 0) return;
-    
-    const intervalId = setInterval(() => {
-      refetch();
-    }, refreshInterval);
-    
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [refreshInterval, refetch]);
 
   // Initialize layer group
   useEffect(() => {
@@ -191,6 +227,11 @@ const DataLayer: React.FC<DataLayerProps> = ({
     pointLayersRef.current = updatedPoints;
   }, [data, leafletMap, getColor, getRadius, getTooltip]);
 
+  // TEMPORARY: Since we're using mock data, we don't have loading or error states
+  // Just return null to render nothing but the markers
+  return null;
+
+  /*
   // Show loading or error state
   if (loading) {
     return (
@@ -210,6 +251,7 @@ const DataLayer: React.FC<DataLayerProps> = ({
 
   // Most of the work is done in effects, nothing to render
   return null;
+  */
 };
 
 export default DataLayer;

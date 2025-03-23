@@ -13,7 +13,7 @@ const App: React.FC = () => {
       url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       visible: true,
-      type: 'base'
+      type: 'base' as 'base'
     },
     {
       id: 'cycling',
@@ -21,7 +21,7 @@ const App: React.FC = () => {
       url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
       attribution: '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases" title="CyclOSM - Open Bicycle render">CyclOSM</a>',
       visible: false,
-      type: 'tile'
+      type: 'tile' as 'tile'
     },
     {
       id: 'topo',
@@ -29,7 +29,7 @@ const App: React.FC = () => {
       url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
       attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
       visible: false,
-      type: 'tile'
+      type: 'tile' as 'tile'
     }
   ], []);
 
@@ -38,7 +38,8 @@ const App: React.FC = () => {
       <MapProvider initialLayers={additionalLayers}>
         <MapContainer 
           additionalLayers={additionalLayers}
-          dataUrl="weather-stations" // This would be a relative endpoint path
+          // COMMENT OUT: Don't pass dataUrl to avoid API calls
+          // dataUrl="weather-stations" 
         />
       </MapProvider>
     </div>

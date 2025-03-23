@@ -36,13 +36,13 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const [distance, setDistance] = useState<number | null>(null);
 
   // Define available map layers
-  const mapLayers = [
+  const mapLayers: MapLayer[] = [
     {
       id: 'backup',
       name: 'Satellite Imagery',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      type: 'tile',
+      type: 'tile' as 'tile', // Type assertion to ensure it matches MapLayer's type definition
       visible: false,
       minZoom: 10,
       maxZoom: 19,
@@ -141,14 +141,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
       
       {/* Main map container */}
       <div id="windy" className="windy-container" />
-      
-      {/* Loading indicator */}
-      {isMapLoading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner"></div>
-          <p>Loading map...</p>
-        </div>
-      )}
+
       
       {/* Error message */}
       {mapError && (
@@ -167,7 +160,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
       {/* Layer components */}
       <WindyLayer />
       {showBackupLayer && <BackupLayer />}
-      {showDataLayer && dataUrl && <DataLayer url={dataUrl} />}
       
       {/* Map controls */}
       {windyService && <MapControls />}

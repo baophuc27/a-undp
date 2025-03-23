@@ -43,8 +43,6 @@ const MapControls: React.FC = () => {
       // Note: We would want to remove the listener here, but
       // we don't have access to the specific listener function reference
     };
-
-export default memo(MapControls);
   }, [windyService, setSelectedLayer]);
 
   // Toggle expansion of controls panel
@@ -181,3 +179,4 @@ export default memo(MapControls);
   );
 };
 
+export default memo(MapControls);
