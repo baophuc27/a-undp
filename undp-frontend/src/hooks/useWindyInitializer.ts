@@ -1,5 +1,5 @@
 // src/hooks/useWindyInitializer.ts
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import L from 'leaflet';
 import { WindyOptions } from '../types/map';
 import { env } from '../config/env';
@@ -59,14 +59,12 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
-  const [leafletScriptLoaded, setLeafletScriptLoaded] = useState<boolean>(false);
-  const [windyScriptLoaded, setWindyScriptLoaded] = useState<boolean>(false);
   const initializationAttemptedRef = useRef<boolean>(false);
   
   // Default Windy options
   const defaultOptions: WindyOptions = {
     key: env.WINDY_API_KEY || "3HFvxAW5zvdalES1JlOw6kNyHybrp1j7",
-    verbose: false,
+    verbose: true,
     plugin: 'windy-plugin-api',
     lat: 10.8415958,
     lon: 106.751815,
@@ -84,99 +82,6 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
     }
   };
 
-  // Load Leaflet script first
-  useEffect(() => {
-    // Skip if script is already loaded or if window.L is already available
-    if (leafletScriptLoaded || window.L) {
-      setLeafletScriptLoaded(true);
-      return;
-    }
-
-    const existingLeafletScript = document.getElementById('leaflet-script');
-    if (existingLeafletScript) {
-      setLeafletScriptLoaded(true);
-      return;
-    }
-
-    setIsLoading(true);
-    const leafletScript = document.createElement('script');
-    leafletScript.id = 'leaflet-script';
-    leafletScript.src = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.js';
-    leafletScript.async = true;
-    
-    leafletScript.onload = () => {
-      console.log('Leaflet loaded successfully');
-      setLeafletScriptLoaded(true);
-      setIsLoading(false);
-    };
-    
-    leafletScript.onerror = (e) => {
-      setError(new Error('Failed to load Leaflet library'));
-      setIsLoading(false);
-      console.error('Error loading Leaflet:', e);
-    };
-    
-    document.head.appendChild(leafletScript);
-    
-    // Add Leaflet CSS
-    const leafletCss = document.createElement('link');
-    leafletCss.rel = 'stylesheet';
-    leafletCss.href = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.css';
-    document.head.appendChild(leafletCss);
-    
-    return () => {
-      if (leafletScript && document.head.contains(leafletScript)) {
-        document.head.removeChild(leafletScript);
-      }
-    };
-  }, []);
-
-  // Load Windy API script after Leaflet is ready
-  useEffect(() => {
-    // Check if Windy is already available
-    if (typeof window.windyInit === 'function') {
-      setWindyScriptLoaded(true);
-      return;
-    }
-    
-    // Skip if not ready or if script is already loaded
-    if (!leafletScriptLoaded || windyScriptLoaded) {
-      return;
-    }
-
-    const existingScript = document.getElementById('windy-api-script');
-    if (existingScript) {
-      setWindyScriptLoaded(true);
-      return;
-    }
-
-    setIsLoading(true);
-    const script = document.createElement('script');
-    script.id = 'windy-api-script';
-    script.src = 'https://api.windy.com/assets/map-forecast/libBoot.js';
-    script.async = true;
-    
-    script.onload = () => {
-      console.log('Windy API script loaded successfully');
-      setWindyScriptLoaded(true);
-      setIsLoading(false);
-    };
-    
-    script.onerror = (e) => {
-      setError(new Error('Failed to load Windy API'));
-      setIsLoading(false);
-      console.error('Error loading Windy API:', e);
-    };
-    
-    document.head.appendChild(script);
-    
-    return () => {
-      if (script && document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-    };
-  }, [leafletScriptLoaded]);
-
   // Initialize Windy with a DOM container
   const initializeWindy = useCallback(async (
     mapContainer: HTMLElement, 
@@ -187,77 +92,101 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
       console.warn('Container element should have id="windy" for Windy API to work properly');
       mapContainer.id = 'windy';
     }
+    
     // Prevent multiple initialization attempts
     if (initializationAttemptedRef.current || windyInstance) {
+      console.log('Initialization already attempted or Windy instance exists');
       return;
     }
 
-    if (!leafletScriptLoaded || !windyScriptLoaded) {
-      console.warn('Leaflet or Windy scripts not loaded yet.');
+    // Check if Leaflet and Windy are available
+    if (!window.L || typeof window.windyInit !== 'function') {
+      console.error('Leaflet or Windy scripts not loaded yet.');
+      console.log('Leaflet available:', !!window.L);
+      console.log('windyInit available:', typeof window.windyInit === 'function');
       setError(new Error('Required scripts not loaded yet'));
-      return;
+      return Promise.reject(new Error('Required scripts not loaded yet'));
     }
+
+    // At this point we're sure windyInit exists, but TypeScript doesn't know that
+    // Type assertion to tell TypeScript that windyInit is definitely a function
+    const windyInitFn = window.windyInit as (options: any, callback: (api: WindyAPI) => void) => void;
 
     initializationAttemptedRef.current = true;
     setIsLoading(true);
+    console.log('Starting Windy initialization...');
 
     try {
-      if (typeof window.windyInit !== 'function') {
-        throw new Error('Windy API not properly loaded');
-      }
-
       // Combine default options with any provided initialOptions
       const options = {
         ...defaultOptions,
         ...initialOptions,
       };
 
-      // Initialize Windy with the container
-      window.windyInit(options, (windyAPI: WindyAPI) => {
-        console.log('Windy initialized successfully');
-        
-        // Configure Windy display options
-        if (options.units) {
-          const { units } = options;
-          if (units.temperature) windyAPI.store.set('tempUnit', units.temperature);
-          if (units.wind) windyAPI.store.set('windUnit', units.wind);
-          if (units.pressure) windyAPI.store.set('pressureUnit', units.pressure);
-          if (units.distance) windyAPI.store.set('distanceUnit', units.distance);
+      console.log('Initializing Windy with options:', options);
+
+      return new Promise<void>((resolve, reject) => {
+        try {
+          // Use the type-asserted function
+          windyInitFn(options, (windyAPI: WindyAPI) => {
+            console.log('Windy initialized successfully with API');
+            
+            // Configure Windy display options
+            if (options.units) {
+              const { units } = options;
+              if (units.temperature) windyAPI.store.set('tempUnit', units.temperature);
+              if (units.wind) windyAPI.store.set('windUnit', units.wind);
+              if (units.pressure) windyAPI.store.set('pressureUnit', units.pressure);
+              if (units.distance) windyAPI.store.set('distanceUnit', units.distance);
+            }
+            
+            // Set graticule option if specified
+            if (options.graticule !== undefined) {
+              windyAPI.store.set('graticule', options.graticule);
+            }
+            
+            // Set hour format if specified
+            if (options.hourFormat) {
+              windyAPI.store.set('hourFormat', options.hourFormat);
+            }
+            
+            // Register listener for overlay changes
+            windyAPI.store.on('overlay', (overlay: string) => {
+              console.log('Overlay changed to:', overlay);
+            });
+            
+            // Register listener for level changes
+            windyAPI.store.on('level', (level: string) => {
+              console.log('Level changed to:', level);
+            });
+            
+            console.log('Storing windy instance and map references');
+            setWindyInstance(windyAPI);
+            if (windyAPI.map) {
+              setLeafletMap(windyAPI.map);
+            } else {
+              console.error('Windy API initialized but map is not available');
+            }
+            
+            initializationAttemptedRef.current = false;
+            setIsLoading(false);
+            resolve();
+          });
+        } catch (err) {
+          const errorObj = err instanceof Error ? err : new Error('Failed to initialize Windy');
+          console.error('Error in windyInit call:', errorObj);
+          reject(errorObj);
         }
-        
-        // Set graticule option if specified
-        if (options.graticule !== undefined) {
-          windyAPI.store.set('graticule', options.graticule);
-        }
-        
-        // Set hour format if specified
-        if (options.hourFormat) {
-          windyAPI.store.set('hourFormat', options.hourFormat);
-        }
-        
-        // Register listener for overlay changes
-        windyAPI.store.on('overlay', (overlay: string) => {
-          console.log('Overlay changed to:', overlay);
-        });
-        
-        // Register listener for level changes
-        windyAPI.store.on('level', (level: string) => {
-          console.log('Level changed to:', level);
-        });
-        
-        setWindyInstance(windyAPI);
-        setLeafletMap(windyAPI.map);
-        initializationAttemptedRef.current = false;
-        setIsLoading(false);
       });
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to initialize Windy');
-      setError(error);
+      const errorObj = err instanceof Error ? err : new Error('Failed to initialize Windy');
+      setError(errorObj);
       initializationAttemptedRef.current = false;
       setIsLoading(false);
-      console.error('Error initializing Windy:', error);
+      console.error('Error initializing Windy:', errorObj);
+      return Promise.reject(errorObj);
     }
-  }, [leafletScriptLoaded, windyScriptLoaded, defaultOptions, windyInstance]);
+  }, [defaultOptions, windyInstance]);
 
   return { initializeWindy, windyInstance, isLoading, error, leafletMap };
 };

@@ -23,6 +23,10 @@ interface MapContextProps {
   addMarker: (point: GeoPoint, options?: L.MarkerOptions) => L.Marker;
   clearMarkers: () => void;
   calculateDistance: (point1: GeoPoint, point2: GeoPoint) => number;
+  // New methods for managing loading state
+  setIsMapLoading: (loading: boolean) => void;
+  setMapError: (error: Error | null) => void;
+  resetMapState: () => void;
 }
 
 const MapContext = createContext<MapContextProps | undefined>(undefined);
@@ -50,21 +54,31 @@ export const MapProvider: React.FC<MapProviderProps> = ({
   // Update available layers when windyService is initialized
   useEffect(() => {
     if (windyService) {
-      // Create windyLayers array with explicit type assertion for each item
-      const windyLayers = windyService.getAvailableLayers().map(layer => ({
-        id: layer.id,
-        name: layer.name,
-        url: '',
-        attribution: 'Windy.com',
-        visible: layer.id === selectedLayer,
-        type: 'windy' as 'windy' // Explicit type assertion
-      }));
-      
-      // Use type assertion for the entire array to satisfy TypeScript
-      setAvailableLayers([...windyLayers, ...initialLayers] as MapLayer[]);
-      setIsMapLoading(false);
+      try {
+        // Create windyLayers array with explicit type assertion for each item
+        const windyLayers = windyService.getAvailableLayers().map(layer => ({
+          id: layer.id,
+          name: layer.name,
+          url: '',
+          attribution: 'Windy.com',
+          visible: layer.id === selectedLayer,
+          type: 'windy' as 'windy' // Explicit type assertion
+        }));
+        
+        // Use type assertion for the entire array to satisfy TypeScript
+        setAvailableLayers([...windyLayers, ...initialLayers] as MapLayer[]);
+      } catch (error) {
+        console.error('Error getting available layers:', error);
+      }
     }
   }, [windyService, initialLayers, selectedLayer]);
+
+  // Reset map state (used for retrying initialization)
+  const resetMapState = () => {
+    setMapError(null);
+    setIsMapLoading(true);
+    // Don't clear existing instances as they may still be valid
+  };
 
   // Handle map click
   const handleMapClick = (e: L.LeafletMouseEvent) => {
@@ -116,8 +130,12 @@ export const MapProvider: React.FC<MapProviderProps> = ({
           leafletMap.removeLayer(marker);
         });
       }
+      
+      if (windyService) {
+        windyService.cleanup();
+      }
     };
-  }, [leafletMap, markers]);
+  }, [leafletMap, markers, windyService]);
 
   const value = {
     leafletMap,
@@ -138,7 +156,10 @@ export const MapProvider: React.FC<MapProviderProps> = ({
     setCurrentZoom,
     addMarker,
     clearMarkers,
-    calculateDistance
+    calculateDistance,
+    setIsMapLoading,
+    setMapError,
+    resetMapState
   };
 
   return <MapContext.Provider value={value}>{children}</MapContext.Provider>;

@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useState, memo } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useMap } from '../../context/MapContext';
 import { useMapLayers } from '../../hooks/useMapLayers';
 import { useTurfAnalysis } from '../../hooks/useTurfAnalysis';
-import WindyLayer from './WindyLayer';
 import BackupLayer from './BackupLayer';
 import DataLayer from './DataLayer';
 import MapControls from './MapControls';
+import WindyDiagnostic from './WindyDiagnostic';
 import { MapLayer } from '../../types/map';
+import { WindyService } from '../../services/windyService';
+import { env } from '../../config/env';
 import './MapContainer.css';
 
 interface MapContainerProps {
@@ -18,6 +20,15 @@ const MapContainer: React.FC<MapContainerProps> = ({
   additionalLayers = [],
   dataUrl
 }) => {
+  // State for script loading and initialization
+  const [scriptsLoaded, setScriptsLoaded] = useState<boolean>(false);
+  const [status, setStatus] = useState<string>('Initializing...');
+  const [initError, setInitError] = useState<Error | null>(null);
+  const [showDiagnostic, setShowDiagnostic] = useState<boolean>(false);
+  const initAttemptedRef = useRef<boolean>(false);
+  const windyContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Map context
   const { 
     leafletMap,
     windyInstance,
@@ -26,7 +37,12 @@ const MapContainer: React.FC<MapContainerProps> = ({
     mapError,
     currentZoom,
     handleMapClick, 
-    setCurrentZoom
+    setCurrentZoom,
+    setLeafletMap,
+    setWindyInstance,
+    setWindyService,
+    setIsMapLoading,
+    setMapError
   } = useMap();
 
   const { calculateDistance } = useTurfAnalysis();
@@ -40,9 +56,9 @@ const MapContainer: React.FC<MapContainerProps> = ({
     {
       id: 'backup',
       name: 'Satellite Imagery',
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}',
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      type: 'tile' as 'tile', // Type assertion to ensure it matches MapLayer's type definition
+      type: 'tile' as 'tile',
       visible: false,
       minZoom: 10,
       maxZoom: 19,
@@ -56,6 +72,152 @@ const MapContainer: React.FC<MapContainerProps> = ({
     activeLayers, 
     toggleLayer 
   } = useMapLayers(mapLayers);
+
+  // Toggle diagnostic tool
+  const toggleDiagnostic = useCallback(() => {
+    setShowDiagnostic(prev => !prev);
+  }, []);
+
+  // Step 1: Load necessary scripts
+  useEffect(() => {
+    const loadScripts = async () => {
+      try {
+        // Load Leaflet if not loaded
+        if (!window.L) {
+          setStatus('Loading Leaflet...');
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.js';
+            script.async = false;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Leaflet'));
+            document.head.appendChild(script);
+            
+            // Add Leaflet CSS
+            const css = document.createElement('link');
+            css.rel = 'stylesheet';
+            css.href = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.css';
+            document.head.appendChild(css);
+          });
+          console.log('Leaflet loaded successfully');
+        }
+        
+        // Load Windy API if not loaded
+        if (typeof window.windyInit !== 'function') {
+          setStatus('Loading Windy API...');
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://api.windy.com/assets/map-forecast/libBoot.js';
+            script.async = false;
+            script.onload = () => {
+              if (typeof window.windyInit === 'function') {
+                resolve();
+              } else {
+                reject(new Error('Windy API loaded but windyInit function not found'));
+              }
+            };
+            script.onerror = () => reject(new Error('Failed to load Windy API'));
+            document.head.appendChild(script);
+          });
+          console.log('Windy API loaded successfully');
+        }
+        
+        // Wait a bit to ensure scripts are fully initialized
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setScriptsLoaded(true);
+        setStatus('Scripts loaded successfully');
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error('Unknown error loading scripts');
+        console.error('Script loading error:', error);
+        setInitError(error);
+        setMapError(error);
+        setStatus('Failed to load scripts');
+      }
+    };
+    
+    loadScripts();
+  }, [setMapError]);
+
+  // Step 2: Initialize Windy once scripts are loaded
+  useEffect(() => {
+    if (initAttemptedRef.current || initError || !scriptsLoaded || !windyContainerRef.current) {
+      return;
+    }
+    
+    const initializeWindy = async () => {
+      initAttemptedRef.current = true;
+      
+      try {
+        setStatus('Initializing Windy...');
+        
+        // Make sure we have the windy container with id="windy"
+        const windyContainer = windyContainerRef.current;
+        
+        if (typeof window.windyInit !== 'function') {
+          throw new Error('windyInit function not available');
+        }
+        
+        // Use the API key from env
+        const options = {
+          key: env.WINDY_API_KEY || '3HFvxAW5zvdalES1JlOw6kNyHybrp1j7', // Use env or fallback to demo key
+          verbose: true,
+          lat: env.MAP_CENTER_LAT,
+          lon: env.MAP_CENTER_LNG,
+          zoom: env.MAP_DEFAULT_ZOOM,
+          overlay: 'wind',
+          level: 'surface',
+          timestamp: Math.floor(Date.now() / 1000),
+          hourFormat: '24h',
+          graticule: true,
+          units: {
+            temperature: 'C',
+            wind: 'm/s',
+            pressure: 'hPa',
+            distance: 'km'
+          }
+        };
+        
+        console.log('Initializing Windy with options:', options);
+        
+        // Initialize Windy
+        window.windyInit(options, (windyAPI: any) => {
+          console.log('Windy initialized successfully!');
+          setStatus('Windy initialized successfully');
+          
+          // Store instances in context
+          setWindyInstance(windyAPI);
+          setLeafletMap(windyAPI.map);
+          
+          // Create WindyService
+          try {
+            const service = new WindyService(windyAPI, {
+              key: env.WINDY_API_KEY || '3HFvxAW5zvdalES1JlOw6kNyHybrp1j7',
+              verbose: true,
+              plugin: 'windy-plugin-api'
+            });
+            
+            setWindyService(service);
+            setIsMapLoading(false);
+            console.log('WindyService created and map is ready');
+          } catch (err) {
+            console.error('Error creating WindyService:', err);
+            // Still continue even if service creation fails
+            setIsMapLoading(false);
+          }
+        });
+      } catch (err) {
+        initAttemptedRef.current = false;
+        const error = err instanceof Error ? err : new Error('Unknown error initializing Windy');
+        console.error('Windy initialization error:', error);
+        setInitError(error);
+        setMapError(error);
+        setStatus('Failed to initialize Windy');
+      }
+    };
+    
+    initializeWindy();
+  }, [scriptsLoaded, initError, setWindyInstance, setLeafletMap, setWindyService, setIsMapLoading, setMapError]);
 
   // Handle map click for distance measurement
   const onMapClick = useCallback((e: any) => {
@@ -119,11 +281,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     
     return () => {
       // Clean up listeners
-      if (windyInstance.broadcast) {
-        // Note: Windy broadcast doesn't have an 'off' method,
-        // so we can't properly remove these listeners
-      }
-      
       if (leafletMap) {
         leafletMap.off('zoomend', checkZoom);
         leafletMap.off('moveend', checkZoom);
@@ -131,23 +288,150 @@ const MapContainer: React.FC<MapContainerProps> = ({
     };
   }, [windyInstance, leafletMap, showBackupLayer, activeLayers, toggleLayer, setCurrentZoom]);
 
+  // Show loading state with debugging info
+  if (isMapLoading) {
+    return (
+      <div className="map-container">
+        {/* Show the diagnostic component if enabled */}
+        {showDiagnostic && <WindyDiagnostic />}
+        
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+          <p>Loading map components...</p>
+          <div className="loading-debug" style={{ fontSize: '12px', marginTop: '10px', color: '#555' }}>
+            <p>Status: {status}</p>
+            <p>Scripts loaded: {scriptsLoaded ? 'Yes' : 'No'}</p>
+            <p>Map initialized: {leafletMap ? 'Yes' : 'No'}</p>
+            <p>Windy initialized: {windyInstance ? 'Yes' : 'No'}</p>
+            <p>WindyService ready: {windyService ? 'Yes' : 'No'}</p>
+            <button
+              onClick={toggleDiagnostic}
+              style={{
+                padding: '5px 10px',
+                background: '#3498db',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                marginTop: '10px',
+                cursor: 'pointer'
+              }}
+            >
+              {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Always render the Windy container div */}
+        <div 
+          id="windy" 
+          ref={windyContainerRef} 
+          className="windy-container" 
+          style={{ width: '100%', height: '100%' }} 
+        />
+      </div>
+    );
+  }
+
+  // Show error state
+  if (mapError || initError) {
+    const error = mapError || initError;
+    return (
+      <div className="map-container">
+        {/* Show the diagnostic component if enabled */}
+        {showDiagnostic && <WindyDiagnostic />}
+        
+        <div className="error-overlay">
+          <h3>Error Loading Map</h3>
+          <p>{error?.message || 'Unknown error occurred'}</p>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{ 
+                padding: '8px 12px', 
+                background: '#3498db', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                cursor: 'pointer'
+              }}
+            >
+              Reload Page
+            </button>
+            <button
+              onClick={toggleDiagnostic}
+              style={{
+                padding: '8px 12px',
+                background: '#2ecc71',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
+            </button>
+          </div>
+        </div>
+        <div 
+          id="windy" 
+          ref={windyContainerRef} 
+          className="windy-container" 
+          style={{ width: '100%', height: '100%' }} 
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="map-container">
-      {/* Zoom level indicator */}
-      <div className="zoom-indicator">
-        Zoom: {currentZoom.toFixed(1)} 
-        {showBackupLayer && ' (Detailed View)'}
+      {/* Show the diagnostic component if enabled */}
+      {showDiagnostic && <WindyDiagnostic />}
+      
+      {/* Diagnostic toggle button */}
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        zIndex: 1000,
+      }}>
+        <button
+          onClick={toggleDiagnostic}
+          style={{
+            padding: '8px 12px',
+            background: 'rgba(52, 152, 219, 0.8)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+          }}
+        >
+          {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
+        </button>
       </div>
       
-      {/* Main map container */}
-      <div id="windy" className="windy-container" />
-
-      
-      {/* Error message */}
-      {mapError && (
-        <div className="error-overlay">
-          <p>Error: {mapError.message}</p>
+      {/* Zoom level indicator */}
+      {currentZoom && (
+        <div className="zoom-indicator">
+          Zoom: {currentZoom.toFixed(1)} 
+          {showBackupLayer && ' (Detailed View)'}
         </div>
+      )}
+      
+      {/* Main map container */}
+      <div 
+        id="windy" 
+        ref={windyContainerRef} 
+        className="windy-container" 
+        style={{ width: '100%', height: '100%' }} 
+      />
+      
+      {/* Layer components */}
+      {showBackupLayer && leafletMap && <BackupLayer />}
+      
+      {/* Data layer */}
+      {showDataLayer && dataUrl && leafletMap && (
+        <DataLayer url={dataUrl} />
       )}
       
       {/* Distance measurement display */}
@@ -157,15 +441,10 @@ const MapContainer: React.FC<MapContainerProps> = ({
         </div>
       )}
       
-      {/* Layer components */}
-      <WindyLayer />
-      {showBackupLayer && <BackupLayer />}
-      
-      {/* Map controls */}
+      {/* Map controls - only show when windyService is available */}
       {windyService && <MapControls />}
     </div>
   );
 };
 
-// Use memo to prevent unnecessary re-renders
-export default memo(MapContainer);
+export default MapContainer;

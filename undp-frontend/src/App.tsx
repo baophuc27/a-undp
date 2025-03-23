@@ -43,6 +43,7 @@ const App: React.FC = () => {
         />
       </MapProvider>
     </div>
+
   );
 };
 
