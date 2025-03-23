@@ -1,7 +1,5 @@
-import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import L from 'leaflet';
-import { Map as LeafletMap, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { env } from '../../config/env';
 import { useWindyInitializer } from '../../hooks/useWindyInitializer';
@@ -14,8 +12,8 @@ import { useTurfAnalysis } from '../../hooks/useTurfAnalysis';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// Fix for default icon in CRA
-let DefaultIcon = L.icon({
+// Fix for default icon in CRA - only do this once
+const DefaultIcon = L.icon({
   iconUrl: icon,
   shadowUrl: iconShadow,
   iconSize: [25, 41],
@@ -30,28 +28,48 @@ interface MapContainerProps {
 }
 
 const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) => {
-  const mapRef = useRef<any>(null);
-  const [map, setMap] = useState<L.Map | null>(null);
+  // Container ref for Windy initialization
+  const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.Marker[]>([]);
   const bufferLayerRef = useRef<L.GeoJSON | null>(null);
-  const { initializeWindy, windyInstance } = useWindyInitializer();
+  
+  // Use the modified hook that initializes Windy with a DOM element
+  const { initializeWindy, windyInstance, leafletMap, isLoading, error } = useWindyInitializer();
   const [windyService, setWindyService] = useState<WindyService | null>(null);
   const { calculateDistance, createBuffer } = useTurfAnalysis();
+  const layerControlRef = useRef<L.Control.Layers | null>(null);
 
   // Default map config from environment variables
   const mapConfig = {
-    center: [env.MAP_CENTER_LAT, env.MAP_CENTER_LNG] as [number, number],
-    zoom: env.MAP_DEFAULT_ZOOM,
+    center: [
+      env.MAP_CENTER_LAT || 10.8415958, 
+      env.MAP_CENTER_LNG || 106.751815
+    ] as [number, number],
+    zoom: env.MAP_DEFAULT_ZOOM || 13,
     minZoom: 3,
     maxZoom: 18
   };
 
-  // Handle map click
-  const handleMapClick = (e: L.LeafletMouseEvent) => {
-    if (!map) return;
+  // Handle map click - memoize to prevent recreation on each render
+  const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
+    if (!leafletMap) return;
+    
+    // Clear markers if there are already 2 to prevent memory buildup
+    if (markersRef.current.length >= 2) {
+      markersRef.current.forEach(marker => {
+        if (leafletMap) marker.removeFrom(leafletMap);
+      });
+      markersRef.current = [];
+      
+      // Clear buffer layer
+      if (bufferLayerRef.current) {
+        bufferLayerRef.current.removeFrom(leafletMap);
+        bufferLayerRef.current = null;
+      }
+    }
     
     // Create a marker
-    const marker = L.marker(e.latlng).addTo(map);
+    const marker = L.marker(e.latlng).addTo(leafletMap);
     
     // Add marker to array
     markersRef.current.push(marker);
@@ -73,32 +91,38 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
       // Create buffer around first point
       const buffer = createBuffer(point1, 1); // 1km buffer
       
-      if (bufferLayerRef.current) {
-        map.removeLayer(bufferLayerRef.current);
+      if (bufferLayerRef.current && leafletMap) {
+        leafletMap.removeLayer(bufferLayerRef.current);
       }
       
-      bufferLayerRef.current = L.geoJSON(buffer).addTo(map);
+      bufferLayerRef.current = L.geoJSON(buffer).addTo(leafletMap);
     }
-  };
+  }, [leafletMap, calculateDistance, createBuffer]);
 
-  // Initialize map reference
-  const handleMapReady = () => {
-    if (mapRef.current && !map) {
-      const leafletMap = mapRef.current.leafletElement;
-      setMap(leafletMap);
-      
-      // Add click event handler directly to the Leaflet map
-      leafletMap.on('click', handleMapClick);
-    }
-  };
-
-  // Initialize Windy with the Leaflet map instance
+  // Initialize Windy with the container
   useEffect(() => {
-    if (map) {
-      // Initialize Windy with this map instance
-      initializeWindy(map);
+    if (mapContainerRef.current && !windyInstance && !isLoading) {
+      initializeWindy(mapContainerRef.current, {
+        key: env.WINDY_API_KEY,
+        verbose: false,
+        plugin: 'windy-plugin-api',
+        lat: mapConfig.center[0],
+        lon: mapConfig.center[1],
+        zoom: mapConfig.zoom
+      });
     }
-  }, [map, initializeWindy]);
+  }, [mapContainerRef, windyInstance, isLoading, initializeWindy, mapConfig]);
+
+  // Add click event listener to the map when it's available
+  useEffect(() => {
+    if (leafletMap) {
+      leafletMap.on('click', handleMapClick);
+
+      return () => {
+        leafletMap.off('click', handleMapClick);
+      };
+    }
+  }, [leafletMap, handleMapClick]);
 
   // Initialize Windy service when windyInstance is available
   useEffect(() => {
@@ -112,66 +136,126 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
     }
   }, [windyInstance, windyService]);
 
-  // Handle additional layers
+  // Handle additional layers - optimized to prevent unnecessary updates
   useEffect(() => {
-    if (!map || !additionalLayers.length) return;
+    if (!leafletMap || !additionalLayers.length) return;
+
+    // Clean up previous layer control if it exists
+    if (layerControlRef.current) {
+      leafletMap.removeControl(layerControlRef.current);
+      layerControlRef.current = null;
+    }
 
     const layerControls: Record<string, L.Layer> = {};
+    const activeLayersRef: L.TileLayer[] = [];
     
     additionalLayers.forEach(layer => {
+      const tileLayer = L.tileLayer(layer.url, {
+        attribution: layer.attribution,
+        // Add performance options
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        keepBuffer: 2
+      });
+      
       if (layer.visible) {
-        const tileLayer = L.tileLayer(layer.url, {
-          attribution: layer.attribution
-        });
-        
-        tileLayer.addTo(map);
-        layerControls[layer.name] = tileLayer;
+        tileLayer.addTo(leafletMap);
+        activeLayersRef.push(tileLayer);
       }
+      
+      layerControls[layer.name] = tileLayer;
     });
     
     if (Object.keys(layerControls).length > 0) {
-      L.control.layers({}, layerControls).addTo(map);
+      layerControlRef.current = L.control.layers({}, layerControls).addTo(leafletMap);
     }
     
     return () => {
-      additionalLayers.forEach(layer => {
-        map.eachLayer(mapLayer => {
-          if ((mapLayer as L.TileLayer).options?.attribution === layer.attribution) {
-            map.removeLayer(mapLayer);
-          }
-        });
+      // Clean up all added layers
+      activeLayersRef.forEach(layer => {
+        if (leafletMap) leafletMap.removeLayer(layer);
       });
-    };
-  }, [map, additionalLayers]);
-
-  // Cleanup event listeners on unmount
-  useEffect(() => {
-    return () => {
-      if (map) {
-        map.off('click', handleMapClick);
+      
+      // Remove layer control
+      if (layerControlRef.current && leafletMap) {
+        leafletMap.removeControl(layerControlRef.current);
+        layerControlRef.current = null;
       }
     };
-  }, [map]);
+  }, [leafletMap, additionalLayers]);
+
+  // Cleanup event listeners and resources on unmount
+  useEffect(() => {
+    return () => {
+      if (leafletMap) {
+        // Clean up markers
+        markersRef.current.forEach(marker => {
+          marker.removeFrom(leafletMap);
+        });
+        markersRef.current = [];
+        
+        // Clean up buffer layer
+        if (bufferLayerRef.current) {
+          bufferLayerRef.current.removeFrom(leafletMap);
+          bufferLayerRef.current = null;
+        }
+        
+        // Clean up layer control
+        if (layerControlRef.current) {
+          leafletMap.removeControl(layerControlRef.current);
+          layerControlRef.current = null;
+        }
+      }
+    };
+  }, [leafletMap]);
 
   return (
     <div className="map-container" style={{ width: '100%', height: '100vh' }}>
-      <LeafletMap
-        ref={mapRef}
-        center={mapConfig.center}
-        zoom={mapConfig.zoom}
-        minZoom={mapConfig.minZoom}
-        maxZoom={mapConfig.maxZoom}
+      {/* Windy container - MUST have id="windy" for the Windy API to work */}
+      <div 
+        id="windy"
+        ref={mapContainerRef} 
         style={{ width: '100%', height: '100%' }}
-        whenReady={handleMapReady}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-      </LeafletMap>
+      />
+      
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="loading-overlay" style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(255, 255, 255, 0.7)',
+          zIndex: 1000
+        }}>
+          <p>Loading map...</p>
+        </div>
+      )}
+      
+      {/* Error message */}
+      {error && (
+        <div className="error-overlay" style={{
+          position: 'absolute',
+          top: 10,
+          left: 10,
+          padding: '10px 15px',
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          borderRadius: '4px',
+          zIndex: 1000
+        }}>
+          <p>Error: {error.message}</p>
+        </div>
+      )}
+      
       {windyService && <WindyControls windyService={windyService} />}
     </div>
   );
 };
 
-export default MapContainer;
+// Use memo to prevent unnecessary re-renders
+export default memo(MapContainer);

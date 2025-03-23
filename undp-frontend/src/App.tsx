@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import MapContainer from './components/Map/MapContainer';
 import { MapLayer } from './types/map';
 import './App.css';
 
 const App: React.FC = () => {
-  // Define additional map layers
-  const additionalLayers: MapLayer[] = [
+  // Define additional map layers - memoize to prevent recreation on each render
+  const additionalLayers: MapLayer[] = useMemo(() => [
     {
       id: 'cycling',
       name: 'Cycling Map',
@@ -20,7 +20,7 @@ const App: React.FC = () => {
       attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
       visible: false
     }
-  ];
+  ], []);
 
   return (
     <div className="App">
@@ -29,4 +29,5 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+// Use memo to prevent unnecessary re-renders
+export default memo(App);
