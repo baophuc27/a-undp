@@ -1,3 +1,4 @@
+// src/components/Map/MapContainer.tsx
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -25,19 +26,37 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 interface MapContainerProps {
   additionalLayers?: MapLayer[];
+  backupLayer?: MapLayer; // Optional backup layer for high zoom levels
 }
 
-const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) => {
+const MapContainer: React.FC<MapContainerProps> = ({ 
+  additionalLayers = [],
+  backupLayer = {
+    id: 'backup',
+    name: 'Detailed View',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    visible: false
+  } 
+}) => {
   // Container ref for Windy initialization
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.Marker[]>([]);
   const bufferLayerRef = useRef<L.GeoJSON | null>(null);
+  const backupLayerRef = useRef<L.TileLayer | null>(null);
   
   // Use the modified hook that initializes Windy with a DOM element
   const { initializeWindy, windyInstance, leafletMap, isLoading, error } = useWindyInitializer();
   const [windyService, setWindyService] = useState<WindyService | null>(null);
   const { calculateDistance, createBuffer } = useTurfAnalysis();
   const layerControlRef = useRef<L.Control.Layers | null>(null);
+  
+  // State to track if backup layer is active
+  const [isBackupLayerActive, setIsBackupLayerActive] = useState<boolean>(false);
+  const [currentZoom, setCurrentZoom] = useState<number>(0);
+  
+  // Keep track of the last checked timestamp to avoid duplicate checks
+  const lastCheckRef = useRef<number>(0);
 
   // Default map config from environment variables
   const mapConfig = {
@@ -99,16 +118,80 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
     }
   }, [leafletMap, calculateDistance, createBuffer]);
 
+  // Function to check zoom level and toggle the backup layer
+  const checkZoomAndToggleBackupLayer = useCallback(() => {
+    if (!windyInstance || !leafletMap) return;
+    
+    try {
+      // Use current timestamp to prevent duplicate checks
+      const now = Date.now();
+      if (now - lastCheckRef.current < 50) return; // Throttle checks to avoid excessive updates
+      lastCheckRef.current = now;
+      
+      // Get zoom level from Windy store
+      const mapCoords = windyInstance.store.get('mapCoords');
+      
+      if (mapCoords && typeof mapCoords.zoom === 'number') {
+        const zoom = mapCoords.zoom;
+        setCurrentZoom(zoom);
+        
+        // Log current zoom level for debugging
+        console.log(`Current Windy zoom level: ${zoom}`);
+        
+        // Toggle backup layer based on zoom level
+        if (zoom > 11) {
+          // Only add the layer if it's not already active
+          if (!isBackupLayerActive) {
+            if (!backupLayerRef.current) {
+              // Create a new layer
+              backupLayerRef.current = L.tileLayer(backupLayer.url, {
+                attribution: backupLayer.attribution,
+                minZoom: 11, // Only show at zoom levels > 11
+                maxZoom: 22,
+                opacity: 0.7 // Semi-transparent to allow seeing Windy data
+              }).addTo(leafletMap);
+              
+              // Add to layer control if it exists
+              if (layerControlRef.current && backupLayerRef.current) {
+                layerControlRef.current.addOverlay(backupLayerRef.current, backupLayer.name);
+              }
+            } else if (!leafletMap.hasLayer(backupLayerRef.current)) {
+              // Reuse existing layer
+              backupLayerRef.current.addTo(leafletMap);
+            }
+            
+            setIsBackupLayerActive(true);
+            console.log('Backup layer activated (zoom level > 11)');
+          }
+        } else {
+          // Only remove the layer if it's currently active
+          if (isBackupLayerActive && backupLayerRef.current && leafletMap.hasLayer(backupLayerRef.current)) {
+            leafletMap.removeLayer(backupLayerRef.current);
+            setIsBackupLayerActive(false);
+            console.log('Backup layer deactivated (zoom level <= 11)');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking zoom level:', err);
+    }
+  }, [windyInstance, leafletMap, isBackupLayerActive, backupLayer]);
+
   // Initialize Windy with the container
   useEffect(() => {
     if (mapContainerRef.current && !windyInstance && !isLoading) {
       initializeWindy(mapContainerRef.current, {
         key: env.WINDY_API_KEY,
-        verbose: false,
+        verbose: true, // Set to true for more detailed console logs
         plugin: 'windy-plugin-api',
         lat: mapConfig.center[0],
         lon: mapConfig.center[1],
-        zoom: mapConfig.zoom
+        zoom: mapConfig.zoom,
+        overlay: 'wind', // Default overlay
+        level: 'surface', // Default level
+        timestamp: Math.floor(Date.now() / 1000), // Current time
+        hourFormat: '24h', // Use 24-hour format
+        graticule: true // Show lat/lon grid
       });
     }
   }, [mapContainerRef, windyInstance, isLoading, initializeWindy, mapConfig]);
@@ -117,24 +200,72 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
   useEffect(() => {
     if (leafletMap) {
       leafletMap.on('click', handleMapClick);
-
+      
       return () => {
         leafletMap.off('click', handleMapClick);
       };
     }
   }, [leafletMap, handleMapClick]);
 
+  // Setup listeners for detecting zoom changes
+  useEffect(() => {
+    if (windyInstance && leafletMap) {
+      console.log('Setting up zoom change listeners');
+      
+      // Initial check
+      setTimeout(() => {
+        checkZoomAndToggleBackupLayer();
+      }, 500);
+      
+      // Method 1: Monitor store change for mapCoords
+      windyInstance.store.on('mapCoords', checkZoomAndToggleBackupLayer);
+      
+      // Method 2: Use Leaflet's zoomend event
+      leafletMap.on('zoomend', checkZoomAndToggleBackupLayer);
+      
+      // Method 3: Use Leaflet's moveend event which also fires on zoom
+      leafletMap.on('moveend', checkZoomAndToggleBackupLayer);
+      
+      // Method 4: Use a polling mechanism as a fallback - check zoom level every 200ms
+      const intervalId = setInterval(() => {
+        if (windyInstance && windyInstance.store) {
+          const mapCoords = windyInstance.store.get('mapCoords');
+          if (mapCoords && mapCoords.zoom !== currentZoom) {
+            checkZoomAndToggleBackupLayer();
+          }
+        }
+      }, 200);
+      
+      return () => {
+        // Clean up event listeners
+        if (leafletMap) {
+          leafletMap.off('zoomend', checkZoomAndToggleBackupLayer);
+          leafletMap.off('moveend', checkZoomAndToggleBackupLayer);
+        }
+        
+        // Clear interval
+        clearInterval(intervalId);
+      };
+    }
+  }, [windyInstance, leafletMap, checkZoomAndToggleBackupLayer, currentZoom]);
+
   // Initialize Windy service when windyInstance is available
   useEffect(() => {
     if (windyInstance && !windyService) {
       const service = new WindyService(windyInstance, {
         key: env.WINDY_API_KEY,
-        verbose: false,
+        verbose: true,
         plugin: 'windy-plugin-api'
       });
       setWindyService(service);
+      
+      // Additional broadcast listener to catch map changes
+      if (windyInstance.broadcast) {
+        windyInstance.broadcast.on('redrawFinished', checkZoomAndToggleBackupLayer);
+        windyInstance.broadcast.on('paramsChanged', checkZoomAndToggleBackupLayer);
+      }
     }
-  }, [windyInstance, windyService]);
+  }, [windyInstance, windyService, checkZoomAndToggleBackupLayer]);
 
   // Handle additional layers - optimized to prevent unnecessary updates
   useEffect(() => {
@@ -168,6 +299,11 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
     
     if (Object.keys(layerControls).length > 0) {
       layerControlRef.current = L.control.layers({}, layerControls).addTo(leafletMap);
+      
+      // Add backup layer to layer control if it's active
+      if (isBackupLayerActive && backupLayerRef.current) {
+        layerControlRef.current.addOverlay(backupLayerRef.current, backupLayer.name);
+      }
     }
     
     return () => {
@@ -182,7 +318,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
         layerControlRef.current = null;
       }
     };
-  }, [leafletMap, additionalLayers]);
+  }, [leafletMap, additionalLayers, isBackupLayerActive, backupLayer]);
 
   // Cleanup event listeners and resources on unmount
   useEffect(() => {
@@ -200,6 +336,12 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
           bufferLayerRef.current = null;
         }
         
+        // Clean up backup layer
+        if (backupLayerRef.current) {
+          backupLayerRef.current.removeFrom(leafletMap);
+          backupLayerRef.current = null;
+        }
+        
         // Clean up layer control
         if (layerControlRef.current) {
           leafletMap.removeControl(layerControlRef.current);
@@ -211,6 +353,21 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
 
   return (
     <div className="map-container" style={{ width: '100%', height: '100vh' }}>
+      {/* Zoom level indicator */}
+      <div style={{
+        position: 'absolute',
+        bottom: 10,
+        left: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        padding: '5px 10px',
+        borderRadius: 4,
+        zIndex: 1000,
+        fontSize: 12,
+        fontWeight: 'bold'
+      }}>
+        Zoom: {currentZoom.toFixed(1)} {isBackupLayerActive && '(Detailed View Active)'}
+      </div>
+      
       {/* Windy container - MUST have id="windy" for the Windy API to work */}
       <div 
         id="windy"
@@ -218,23 +375,6 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
         style={{ width: '100%', height: '100%' }}
       />
       
-      {/* Loading indicator */}
-      {isLoading && (
-        <div className="loading-overlay" style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: 'rgba(255, 255, 255, 0.7)',
-          zIndex: 1000
-        }}>
-          <p>Loading map...</p>
-        </div>
-      )}
       
       {/* Error message */}
       {error && (
@@ -252,6 +392,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ additionalLayers = [] }) =>
         </div>
       )}
       
+      {/* WindyControls component */}
       {windyService && <WindyControls windyService={windyService} />}
     </div>
   );

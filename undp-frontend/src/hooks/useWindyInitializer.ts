@@ -1,3 +1,4 @@
+// src/hooks/useWindyInitializer.ts
 import { useState, useCallback, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { WindyOptions } from '../types/map';
@@ -8,9 +9,13 @@ interface WindyAPI {
   picker: {
     on: (event: string, callback: (data: any) => void) => void;
     open: (options: { lat: number; lon: number }) => void;
+    close: () => void;
+    getParams: () => any;
   };
   broadcast: {
     on: (event: string, callback: (data: any) => void) => void;
+    fire: (event: string, data?: any) => void;
+    // Note: Windy broadcast doesn't have an 'off' method
   };
   overlays: {
     [key: string]: () => void;
@@ -19,10 +24,20 @@ interface WindyAPI {
   store: {
     get: (key: string) => any;
     set: (key: string, value: any) => void;
+    on: (key: string, callback: (value: any) => void) => void;
+    // Note: Windy store doesn't have an 'off' method for removing listeners
+  };
+  products: {
+    availableLevels: string[];
+    availableOverlays: string[];
+    availableTimestamps: number[];
+  };
+  utils: {
+    wind2obj: (uv: [number, number]) => { wind: number; dir: number };
+    dateFormat: (timestamp: number) => string;
   };
   [key: string]: any; // Allow for additional properties
 }
-
 interface UseWindyInitializerReturn {
   initializeWindy: (mapContainer: HTMLElement, initialOptions?: Partial<WindyOptions>) => Promise<void>;
   windyInstance: WindyAPI | null;
@@ -34,7 +49,7 @@ interface UseWindyInitializerReturn {
 declare global {
   interface Window {
     L: typeof L;
-    windyInit: (options: any, callback: (api: WindyAPI) => void) => void;
+    windyInit?: (options: any, callback: (api: WindyAPI) => void) => void;
     W: any;
   }
 }
@@ -50,14 +65,23 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
   
   // Default Windy options
   const defaultOptions: WindyOptions = {
-    key: "Pwcttu942nPWvQmFFMrLtIeOoywFyPPx",
+    key: env.WINDY_API_KEY || "3HFvxAW5zvdalES1JlOw6kNyHybrp1j7",
     verbose: false,
     plugin: 'windy-plugin-api',
     lat: 10.8415958,
     lon: 106.751815,
     zoom: 13,
     overlay: 'wind',
-    level: 'surface'
+    level: 'surface',
+    hourFormat: '24h',
+    graticule: true,
+    // Default units
+    units: {
+      temperature: 'C',
+      wind: 'm/s',
+      pressure: 'hPa',
+      distance: 'km'
+    }
   };
 
   // Load Leaflet script first
@@ -109,11 +133,14 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
 
   // Load Windy API script after Leaflet is ready
   useEffect(() => {
+    // Check if Windy is already available
+    if (typeof window.windyInit === 'function') {
+      setWindyScriptLoaded(true);
+      return;
+    }
+    
     // Skip if not ready or if script is already loaded
-    if (!leafletScriptLoaded || windyScriptLoaded || window.windyInit) {
-      if (window.windyInit) {
-        setWindyScriptLoaded(true);
-      }
+    if (!leafletScriptLoaded || windyScriptLoaded) {
       return;
     }
 
@@ -175,7 +202,7 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
     setIsLoading(true);
 
     try {
-      if (!window.windyInit) {
+      if (typeof window.windyInit !== 'function') {
         throw new Error('Windy API not properly loaded');
       }
 
@@ -188,6 +215,36 @@ export const useWindyInitializer = (): UseWindyInitializerReturn => {
       // Initialize Windy with the container
       window.windyInit(options, (windyAPI: WindyAPI) => {
         console.log('Windy initialized successfully');
+        
+        // Configure Windy display options
+        if (options.units) {
+          const { units } = options;
+          if (units.temperature) windyAPI.store.set('tempUnit', units.temperature);
+          if (units.wind) windyAPI.store.set('windUnit', units.wind);
+          if (units.pressure) windyAPI.store.set('pressureUnit', units.pressure);
+          if (units.distance) windyAPI.store.set('distanceUnit', units.distance);
+        }
+        
+        // Set graticule option if specified
+        if (options.graticule !== undefined) {
+          windyAPI.store.set('graticule', options.graticule);
+        }
+        
+        // Set hour format if specified
+        if (options.hourFormat) {
+          windyAPI.store.set('hourFormat', options.hourFormat);
+        }
+        
+        // Register listener for overlay changes
+        windyAPI.store.on('overlay', (overlay: string) => {
+          console.log('Overlay changed to:', overlay);
+        });
+        
+        // Register listener for level changes
+        windyAPI.store.on('level', (level: string) => {
+          console.log('Level changed to:', level);
+        });
+        
         setWindyInstance(windyAPI);
         setLeafletMap(windyAPI.map);
         initializationAttemptedRef.current = false;
