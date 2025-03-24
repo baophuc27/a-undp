@@ -149,3 +149,125 @@
     margin: 3px 0;
     font-size: 12px;
   }
+
+  /* Add this to src/components/Map/MapContainer.css */
+
+/* Z-index hierarchy for the entire application */
+:root {
+    --z-index-map-base: 1;
+    --z-index-windy-layer: 5;
+    --z-index-map-overlays: 50;
+    --z-index-controls: 100;
+    --z-index-tooltips: 150;
+    --z-index-loading: 200;
+    --z-index-diagnostic: 250;
+    --z-index-modal: 300;
+  }
+  
+  #windy {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: var(--z-index-windy-layer) !important;
+  }
+  
+  /* Map container fixes */
+  .map-container {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+    z-index: var(--z-index-map-base);
+  }
+  
+  /* Fix for Leaflet controls - ensure they appear above Windy layer */
+  .leaflet-control-container {
+    z-index: var(--z-index-controls) !important;
+  }
+  
+  .leaflet-control {
+    z-index: var(--z-index-controls) !important;
+  }
+  
+  /* Map overlays and markers fixes */
+  .leaflet-overlay-pane {
+    z-index: var(--z-index-map-overlays) !important;
+  }
+  
+  .leaflet-marker-pane {
+    z-index: var(--z-index-map-overlays) !important;
+  }
+  
+  .leaflet-tooltip-pane {
+    z-index: var(--z-index-tooltips) !important;
+  }
+  
+  .leaflet-popup-pane {
+    z-index: var(--z-index-tooltips) !important;
+  }
+  
+  /* Custom controls z-index fixes */
+  .map-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: var(--z-index-controls) !important;
+    /* Other styles remain the same */
+  }
+  
+  .zoom-indicator {
+    z-index: var(--z-index-controls) !important;
+  }
+  
+  .distance-overlay {
+    z-index: var(--z-index-controls) !important;
+  }
+  
+  /* Loading and error overlays */
+  .loading-overlay {
+    z-index: var(--z-index-loading) !important;
+  }
+  
+  .error-overlay {
+    z-index: var(--z-index-loading) !important;
+  }
+  
+  /* Diagnostic tool should be on top */
+  .windy-diagnostic {
+    z-index: var(--z-index-diagnostic) !important;
+  }
+  
+  .windy-container, #windy-api-wrapper {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+  /* Fix for any overflow issues */
+  html, body, #root, .App {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+  
+  /* Ensure the Windy tooltip is visible */
+  .wind-tooltip {
+    z-index: var(--z-index-tooltips) !important;
+  }
+  
+  /* Overrides for some Windy-specific elements that might have styling issues */
+  .picker-drag-me {
+    z-index: var(--z-index-controls) !important;
+  }
+  
+  /* Sometimes Windy renders canvases for data visualization - ensure proper stacking */
+  canvas.leaflet-zoom-animated {
+    z-index: var(--z-index-map-overlays) !important;
+  }

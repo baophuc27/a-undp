@@ -323,11 +323,10 @@ const MapContainer: React.FC<MapContainerProps> = ({
         
         {/* Always render the Windy container div */}
         <div 
-          id="windy" 
-          ref={windyContainerRef} 
-          className="windy-container" 
-          style={{ width: '100%', height: '100%' }} 
-        />
+      id="windy" 
+      ref={windyContainerRef} 
+      className="windy-container" 
+    />
       </div>
     );
   }

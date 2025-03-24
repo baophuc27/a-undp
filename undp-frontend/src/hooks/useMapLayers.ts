@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import L from 'leaflet';
 import { MapLayer } from '../types/map';
 import { useMap } from '../context/MapContext';
@@ -14,14 +14,18 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
   const [activeLayers, setActiveLayers] = useState<string[]>(options.defaultActiveLayers || []);
   const [baseLayer, setBaseLayer] = useState<string>(options.defaultBaseLayer || '');
   const [layerControl, setLayerControl] = useState<L.Control.Layers | null>(null);
+  const initializedRef = useRef(false);
 
   // Initialize layers and layer control
   useEffect(() => {
-    if (!leafletMap) return;
+    if (!leafletMap || initializedRef.current) return;
+    initializedRef.current = true;
 
     const layerMap: Record<string, L.Layer> = {};
     const baseLayers: Record<string, L.Layer> = {};
     const overlays: Record<string, L.Layer> = {};
+    const newActiveLayers = [...activeLayers];
+    let newBaseLayer = baseLayer;
 
     // Create layer instances
     layers.forEach(layer => {
@@ -39,7 +43,11 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
         // Add default base layer to map
         if (layer.id === baseLayer || (baseLayer === '' && layer.visible)) {
           tileLayer.addTo(leafletMap);
-          setBaseLayer(layer.id);
+          
+          // Update base layer state outside the effect if needed
+          if (baseLayer === '' && layer.visible) {
+            newBaseLayer = layer.id;
+          }
         }
       } else {
         let overlayLayer: L.Layer;
@@ -76,8 +84,10 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
         // Add layer to map if it's in active layers or marked as visible
         if (activeLayers.includes(layer.id) || layer.visible) {
           overlayLayer.addTo(leafletMap);
-          if (!activeLayers.includes(layer.id)) {
-            setActiveLayers(prev => [...prev, layer.id]);
+          
+          // Collect layer IDs to be added to active layers
+          if (!activeLayers.includes(layer.id) && layer.visible) {
+            newActiveLayers.push(layer.id);
           }
         }
       }
@@ -87,11 +97,20 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
     const control = L.control.layers(baseLayers, overlays).addTo(leafletMap);
     setLayerControl(control);
     setLayerInstances(layerMap);
+    
+    // Only update state if needed
+    if (newBaseLayer !== baseLayer) {
+      setBaseLayer(newBaseLayer);
+    }
+    
+    if (newActiveLayers.length !== activeLayers.length) {
+      setActiveLayers(newActiveLayers);
+    }
 
     return () => {
       // Clean up on unmount
-      if (layerControl) {
-        leafletMap.removeControl(layerControl);
+      if (control) {
+        leafletMap.removeControl(control);
       }
       
       Object.values(layerMap).forEach(layer => {
@@ -100,7 +119,7 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
         }
       });
     };
-  }, [leafletMap, layers]);
+  }, [leafletMap, layers]); // Remove activeLayers and baseLayer from dependencies
 
   // Toggle layer visibility
   const toggleLayer = useCallback((layerId: string) => {
@@ -118,6 +137,8 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
     }
   }, [leafletMap, layerInstances, activeLayers]);
 
+  // Rest of the code remains the same...
+  
   // Change base layer
   const changeBaseLayer = useCallback((layerId: string) => {
     if (!leafletMap || !layerInstances[layerId]) return;
@@ -174,8 +195,6 @@ export const useMapLayers = (layers: MapLayer[], options: UseMapLayersOptions = 
     // Add to layer control if it exists
     if (layerControl) {
       // Use type guard to safely check if this is a base layer
-      // The issue is that by the time we reach this section, TypeScript has narrowed layer.type
-      // to exclude 'base' type, so we need to check it differently
       if (String(layer.type) === 'base') {
         layerControl.addBaseLayer(newLayer, layer.name);
       } else {
