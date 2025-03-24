@@ -36,14 +36,9 @@ const App: React.FC = () => {
   return (
     <div className="App">
       <MapProvider initialLayers={additionalLayers}>
-        <MapContainer 
-          additionalLayers={additionalLayers}
-          // COMMENT OUT: Don't pass dataUrl to avoid API calls
-          // dataUrl="weather-stations" 
-        />
+        <MapContainer additionalLayers={additionalLayers} />
       </MapProvider>
     </div>
-
   );
 };
 

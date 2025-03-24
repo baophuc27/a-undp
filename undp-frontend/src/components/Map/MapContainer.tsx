@@ -5,7 +5,6 @@ import { useTurfAnalysis } from '../../hooks/useTurfAnalysis';
 import BackupLayer from './BackupLayer';
 import DataLayer from './DataLayer';
 import MapControls from './MapControls';
-import WindyDiagnostic from './WindyDiagnostic';
 import { MapLayer } from '../../types/map';
 import { WindyService } from '../../services/windyService';
 import { env } from '../../config/env';
@@ -23,8 +22,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
   // State for script loading and initialization
   const [scriptsLoaded, setScriptsLoaded] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('Initializing...');
-  const [initError, setInitError] = useState<Error | null>(null);
-  const [showDiagnostic, setShowDiagnostic] = useState<boolean>(false);
   const initAttemptedRef = useRef<boolean>(false);
   const windyContainerRef = useRef<HTMLDivElement>(null);
   
@@ -56,7 +53,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     {
       id: 'backup',
       name: 'Satellite Imagery',
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       type: 'tile' as 'tile',
       visible: false,
@@ -72,11 +69,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     activeLayers, 
     toggleLayer 
   } = useMapLayers(mapLayers);
-
-  // Toggle diagnostic tool
-  const toggleDiagnostic = useCallback(() => {
-    setShowDiagnostic(prev => !prev);
-  }, []);
 
   // Step 1: Load necessary scripts
   useEffect(() => {
@@ -99,7 +91,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
             css.href = 'https://unpkg.com/leaflet@1.4.0/dist/leaflet.css';
             document.head.appendChild(css);
           });
-          console.log('Leaflet loaded successfully');
         }
         
         // Load Windy API if not loaded
@@ -119,7 +110,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
             script.onerror = () => reject(new Error('Failed to load Windy API'));
             document.head.appendChild(script);
           });
-          console.log('Windy API loaded successfully');
         }
         
         // Wait a bit to ensure scripts are fully initialized
@@ -129,8 +119,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
         setStatus('Scripts loaded successfully');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Unknown error loading scripts');
-        console.error('Script loading error:', error);
-        setInitError(error);
         setMapError(error);
         setStatus('Failed to load scripts');
       }
@@ -141,7 +129,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
   // Step 2: Initialize Windy once scripts are loaded
   useEffect(() => {
-    if (initAttemptedRef.current || initError || !scriptsLoaded || !windyContainerRef.current) {
+    if (initAttemptedRef.current || !scriptsLoaded || !windyContainerRef.current) {
       return;
     }
     
@@ -178,11 +166,8 @@ const MapContainer: React.FC<MapContainerProps> = ({
           }
         };
         
-        console.log('Initializing Windy with options:', options);
-        
         // Initialize Windy
         window.windyInit(options, (windyAPI: any) => {
-          console.log('Windy initialized successfully!');
           setStatus('Windy initialized successfully');
           
           // Store instances in context
@@ -199,9 +184,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
             
             setWindyService(service);
             setIsMapLoading(false);
-            console.log('WindyService created and map is ready');
           } catch (err) {
-            console.error('Error creating WindyService:', err);
             // Still continue even if service creation fails
             setIsMapLoading(false);
           }
@@ -209,15 +192,13 @@ const MapContainer: React.FC<MapContainerProps> = ({
       } catch (err) {
         initAttemptedRef.current = false;
         const error = err instanceof Error ? err : new Error('Unknown error initializing Windy');
-        console.error('Windy initialization error:', error);
-        setInitError(error);
         setMapError(error);
         setStatus('Failed to initialize Windy');
       }
     };
     
     initializeWindy();
-  }, [scriptsLoaded, initError, setWindyInstance, setLeafletMap, setWindyService, setIsMapLoading, setMapError]);
+  }, [scriptsLoaded, setWindyInstance, setLeafletMap, setWindyService, setIsMapLoading, setMapError]);
 
   // Handle map click for distance measurement
   const onMapClick = useCallback((e: any) => {
@@ -288,94 +269,21 @@ const MapContainer: React.FC<MapContainerProps> = ({
     };
   }, [windyInstance, leafletMap, showBackupLayer, activeLayers, toggleLayer, setCurrentZoom]);
 
-  // Show loading state with debugging info
+  // Show loading state
   if (isMapLoading) {
     return (
       <div className="map-container">
-        {/* Show the diagnostic component if enabled */}
-        {showDiagnostic && <WindyDiagnostic />}
-        
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
           <p>Loading map components...</p>
-          <div className="loading-debug" style={{ fontSize: '12px', marginTop: '10px', color: '#555' }}>
-            <p>Status: {status}</p>
-            <p>Scripts loaded: {scriptsLoaded ? 'Yes' : 'No'}</p>
-            <p>Map initialized: {leafletMap ? 'Yes' : 'No'}</p>
-            <p>Windy initialized: {windyInstance ? 'Yes' : 'No'}</p>
-            <p>WindyService ready: {windyService ? 'Yes' : 'No'}</p>
-            <button
-              onClick={toggleDiagnostic}
-              style={{
-                padding: '5px 10px',
-                background: '#3498db',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                marginTop: '10px',
-                cursor: 'pointer'
-              }}
-            >
-              {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
-            </button>
-          </div>
+          <p>Status: {status}</p>
         </div>
         
         {/* Always render the Windy container div */}
         <div 
-      id="windy" 
-      ref={windyContainerRef} 
-      className="windy-container" 
-    />
-      </div>
-    );
-  }
-
-  // Show error state
-  if (mapError || initError) {
-    const error = mapError || initError;
-    return (
-      <div className="map-container">
-        {/* Show the diagnostic component if enabled */}
-        {showDiagnostic && <WindyDiagnostic />}
-        
-        <div className="error-overlay">
-          <h3>Error Loading Map</h3>
-          <p>{error?.message || 'Unknown error occurred'}</p>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-            <button 
-              onClick={() => window.location.reload()}
-              style={{ 
-                padding: '8px 12px', 
-                background: '#3498db', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '4px', 
-                cursor: 'pointer'
-              }}
-            >
-              Reload Page
-            </button>
-            <button
-              onClick={toggleDiagnostic}
-              style={{
-                padding: '8px 12px',
-                background: '#2ecc71',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
-            </button>
-          </div>
-        </div>
-        <div 
           id="windy" 
           ref={windyContainerRef} 
           className="windy-container" 
-          style={{ width: '100%', height: '100%' }} 
         />
       </div>
     );
@@ -383,32 +291,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
   return (
     <div className="map-container">
-      {/* Show the diagnostic component if enabled */}
-      {showDiagnostic && <WindyDiagnostic />}
-      
-      {/* Diagnostic toggle button */}
-      <div style={{
-        position: 'absolute',
-        top: '10px',
-        right: '10px',
-        zIndex: 1000,
-      }}>
-        <button
-          onClick={toggleDiagnostic}
-          style={{
-            padding: '8px 12px',
-            background: 'rgba(52, 152, 219, 0.8)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-          }}
-        >
-          {showDiagnostic ? 'Hide Diagnostic' : 'Show Diagnostic'}
-        </button>
-      </div>
-      
       {/* Zoom level indicator */}
       {currentZoom && (
         <div className="zoom-indicator">

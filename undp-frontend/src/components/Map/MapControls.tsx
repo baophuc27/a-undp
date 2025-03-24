@@ -8,7 +8,7 @@ const MapControls: React.FC = () => {
   const [availableLayers, setAvailableLayers] = useState<any[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<string>('surface');
   const [overlayVisible, setOverlayVisible] = useState<boolean>(true);
-  const [weatherMarkersVisible, setWeatherMarkersVisible] = useState<boolean>(true);
+  const [weatherMarkersVisible, setWeatherMarkersVisible] = useState<boolean>(false);
   
   // Available altitude levels
   const altitudeLevels = [
@@ -37,12 +37,6 @@ const MapControls: React.FC = () => {
         setSelectedLevel(data.level);
       }
     });
-    
-    // Clean up listener on unmount
-    return () => {
-      // Note: We would want to remove the listener here, but
-      // we don't have access to the specific listener function reference
-    };
   }, [windyService, setSelectedLayer]);
 
   // Toggle expansion of controls panel
@@ -120,7 +114,7 @@ const MapControls: React.FC = () => {
   return (
     <div className="map-controls">
       <div className="map-controls__header" onClick={toggleExpanded}>
-        <h3>Map Controls {isExpanded ? '▼' : '►'}</h3>
+        <h3>Weather Controls {isExpanded ? '▼' : '►'}</h3>
       </div>
       
       {isExpanded && (
